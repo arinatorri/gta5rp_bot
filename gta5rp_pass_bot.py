@@ -1,25 +1,47 @@
 
-import logging
 import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import logging
+from telegram import Update, ReplyKeyboardRemove
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    ConversationHandler,
+    filters,
+)
 from datetime import datetime, timedelta
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
+
+# Состояния диалога
+LEVEL, DATE = range(2)
 
 def get_total_xp(level):
     return sum(1000 + i * 100 for i in range(level))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        """Привет! Я бот-калькулятор боевого пропуска GTA 5 RP 🌴
-Напиши команду /calculate <уровень> <дата>, например:
-/calculate 32 2025-06-06""")
+    await update.message.reply_text("👋 Привет! Я помогу рассчитать дату завершения боевого пропуска GTA 5 RP.
 
-async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+Сначала скажи, какой у тебя сейчас уровень?")
+    return LEVEL
+
+async def get_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        level = int(context.args[0])
-        date_str = context.args[1]
+        level = int(update.message.text)
+        if level < 1 or level > 100:
+            raise ValueError
+        context.user_data["level"] = level
+        await update.message.reply_text("📅 Теперь введи сегодняшнюю дату в формате ГГГГ-ММ-ДД (например, 2025-06-11):")
+        return DATE
+    except ValueError:
+        await update.message.reply_text("❌ Введи корректное число от 1 до 100.")
+        return LEVEL
+
+async def get_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        level = context.user_data["level"]
+        date_str = update.message.text
         current_date = datetime.strptime(date_str, "%Y-%m-%d")
 
         current_xp = get_total_xp(level)
@@ -28,17 +50,36 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         days_needed = (remaining_xp + 5999) // 6000
 
         completion_date = current_date + timedelta(days=days_needed)
-
         await update.message.reply_text(
-            f"Если вы на {level} уровне и сегодня {date_str}, то боевой пропуск завершится {completion_date.date()}"
+            f"✅ Если вы на {level} уровне и сегодня {date_str},\nто боевой пропуск завершится **{completion_date.date()}**.",
+            parse_mode='Markdown'
         )
+        return ConversationHandler.END
     except Exception:
-        await update.message.reply_text("❌ Неверный формат. Используй: /calculate <уровень> <дата> (например, /calculate 32 2025-06-06)")
+        await update.message.reply_text("❌ Введи дату в правильном формате: ГГГГ-ММ-ДД (например, 2025-06-11).")
+        return DATE
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Диалог отменён.", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
 
 async def main():
+    from nest_asyncio import apply
+    apply()
+
     app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("calculate", calculate))
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            LEVEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_level)],
+            DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    app.add_handler(conv_handler)
+
     await app.run_polling()
 
 if __name__ == '__main__':
