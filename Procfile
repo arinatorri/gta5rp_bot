@@ -1,0 +1,1 @@
+worker: python gta5rp_pass_bot.py
