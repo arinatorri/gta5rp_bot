@@ -21,9 +21,7 @@ def get_total_xp(level):
     return sum(1000 + i * 100 for i in range(level))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Я помогу рассчитать дату завершения боевого пропуска GTA 5 RP.
-
-Сначала скажи, какой у тебя сейчас уровень?")
+    await update.message.reply_text("👋 Привет! Я помогу рассчитать дату завершения боевого пропуска GTA 5 RP.\n\nСначала скажи, какой у тебя сейчас уровень?")
     return LEVEL
 
 async def get_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
